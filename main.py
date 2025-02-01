@@ -4,14 +4,13 @@ from transformers import AutoTokenizer, AutoModelForMaskedLM
 from module.feature_extraction import extract_features
 from module.Reasoning_reward import improved_dense_reward
 from module.utils import load_questions, send_openai_prompt
-from module.mlp_toolbox import AdaptiveContextualMLPAgent
-from module.ts_toolbox import AdaptiveContextualThompsonSampling
+from module.new_toolbox import AdaptiveContextualMLPAgent
 import matplotlib.pyplot as plt
 from sklearn.decomposition import PCA
 from scipy.stats import gaussian_kde
 
 # Load the dataset
-all_task = load_questions("./data/shuffled_combined_HARDMATH.json")
+all_task = load_questions("./long_dataset/raw_files/preprocessing/Finalcombined.json")
 
 embedding_dim = 768
 step_lengths = list(range(0, 10))  # 0 to 9
@@ -83,6 +82,7 @@ prompt_template = (
 
     "Diversity Requirements:"
     "Provided below are some previous generated content on this question, you must reason divergently and try your best not to generate duplicate answer and process. Make the final answer as diverse and different. "
+    "You must avoid concluding same result wih the previous generated content and provide new content."
     "Preious contents: {previousones}"
 )
 
@@ -145,55 +145,113 @@ logic_model = AutoModelForSequenceClassification.from_pretrained("bert-base-unca
 
 
 
-class AdaptivePreferenceModel:
-    def __init__(self, initial_weights=None):
-        self.weights = initial_weights or {
-            "LogicalFlaw": 0.35,
-            "Coverage": 0.35,
-            "Confidence": 0.1,
-            "Rationale": 0.1,
-        }
+import torch
+import torch.nn as nn
+import torch.optim as optim
+import json
+from transformers import AutoModel, AutoTokenizer
+from typing import List
 
-    def adjust_weights(self, few_shot_examples):
-        if not few_shot_examples:
-            return
-        avg_scores = {key: np.mean([ex[key] for ex in few_shot_examples]) for key in self.weights}
-        total = sum(avg_scores.values())
-        for key in self.weights:
-            self.weights[key] = avg_scores[key] / total
+class AdaptivePreferenceModel(nn.Module):
+    def __init__(self, model_name="bert-base-uncased", num_weights=4, learning_rate=1e-4):
+        """
+        使用深度学习模型，根据 question 和 candidate_answers 动态选择权重层
+        - model_name: 预训练 Transformer 模型 (BERT, RoBERTa)
+        - num_weights: 评分维度的数量 (LogicalFlaw, Coverage, Confidence, Rationale)
+        """
+        super(AdaptivePreferenceModel, self).__init__()
+        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+        self.encoder = AutoModel.from_pretrained(model_name)
+        
+        # 线性层用于预测最佳 weight vector
+        self.fc = nn.Sequential(
+            nn.Linear(self.encoder.config.hidden_size * 2, 128),
+            nn.ReLU(),
+            nn.Linear(128, num_weights)  # 输出 4 个权重
+        )
+        
+        self.optimizer = optim.Adam(self.parameters(), lr=learning_rate)
+        self.criterion = nn.MSELoss()  # 采用均方误差损失
 
-    def get_weights(self):
-        return self.weights
+    def forward(self, question: str, candidate_answers: List[str]) -> torch.Tensor:
+        """
+        输入：
+        - question: 问题文本 (str)
+        - candidate_answers: 候选答案列表 (List[str])
+        
+        输出：
+        - 预测的最佳权重向量 (Tensor)
+        """
+        # 编码问题文本
+        question_inputs = self.tokenizer(question, return_tensors="pt", padding=True, truncation=True)
+        question_embedding = self.encoder(**question_inputs).last_hidden_state[:, 0, :]  # 取 CLS token 作为表示
+
+        # 编码所有候选答案
+        response_embeddings = []
+        for response in candidate_answers:
+            response_inputs = self.tokenizer(response, return_tensors="pt", padding=True, truncation=True)
+            response_embedding = self.encoder(**response_inputs).last_hidden_state[:, 0, :]
+            response_embeddings.append(response_embedding)
+        
+        # 计算 candidate_answers 的平均 embedding
+        response_tensor = torch.stack(response_embeddings).mean(dim=0)
+
+        # 合并 question + response 作为最终特征
+        combined_features = torch.cat((question_embedding, response_tensor), dim=-1)
+
+        # 通过 MLP 预测最佳权重向量
+        predicted_weights = self.fc(combined_features)
+        predicted_weights = torch.softmax(predicted_weights, dim=-1)  # 归一化成概率分布
+
+        return predicted_weights
+    
+    def update(self, reward: float, question: str, candidate_answers: List[str]):
+        """
+        使用给定的 reward 更新模型参数。
+        - reward: 反馈分数 (float)
+        - question: 问题文本 (str)
+        - candidate_answers: 候选答案列表 (List[str])
+        """
+        self.train()
+        self.optimizer.zero_grad()
+        
+        # 预测权重
+        predicted_weights = self.forward(question, candidate_answers)
+        
+        # 创建目标值 (理想情况下，我们希望模型的预测权重与 reward 成正比)
+        target_weights = torch.full_like(predicted_weights, reward)
+        
+        # 计算损失并更新模型
+        loss = self.criterion(predicted_weights, target_weights)
+        loss.backward()
+        self.optimizer.step()
+        
+        return loss.item()
 
 
+# 初始化模型
 preference_model = AdaptivePreferenceModel()
 
-def select_best_answer(candidate_answers, question, temperature, token_limit, few_shot_examples=None):
+def select_best_answer(candidate_answers, question, temperature, token_limit):
     """
-    从一组候选答案中挑选最佳答案。评分维度包括：
-    - Logical Flaw (逻辑是否严谨、是否存在错误)
-    - Coverage (对问题的覆盖度)
-    - Confidence (对答案正确性的信心程度)
-    - Rationale (解释/推理的质量)
-
-    如果传入了 few_shot_examples，将先用它来调整 preference_model 的权重。
-    随后会生成一个评分用的提示（prompt），调用 LLM 为每个答案打分，
-    最后根据加权结果，返回分数最高的那个答案。
+    选择最佳答案：
+    1. 让模型自动推导问题类型，并选择最优的权重层。
+    2. 结合 response 评分优化权重。
+    3. 计算加权得分，返回最优答案。
     """
 
-    # 若提供了 few-shot 示例，用它来调整模型权重
-    if few_shot_examples:
-        preference_model.adjust_weights(few_shot_examples)
-    weights = preference_model.get_weights()
-    # 可能返回形如：
-    # weights = {
-    #     "logical_flaw": 0.25,
-    #     "coverage": 0.25,
-    #     "confidence": 0.25,
-    #     "rationale": 0.25,
-    # }
+    # 让模型自动预测最佳权重
+    # 让模型生成 (num_candidates, 4) 形状的权重
+    weights = preference_model(question, candidate_answers).detach().numpy()
 
-    # 构造给 LLM 的提示信息
+    # 确保 weights 的行数和 candidate_answers 对齐
+    if weights.shape[0] != len(candidate_answers):
+        weights = np.tile(weights, (len(candidate_answers), 1))  # 复制到正确形状
+
+    print("Selected weight",weights)
+
+    # 构造 LLM 评分提示
+    #scoring_prompt = f"Question: {question}\n\n"
     scoring_prompt = (
         # [Objective]
         f"Question: {question}\n\n"
@@ -211,6 +269,7 @@ def select_best_answer(candidate_answers, question, temperature, token_limit, fe
         "1. Provide scores for each dimension for all answers."
         "2. Combine the scores to identify the best answer."
         "3. Output must be plain text formatted like JSON but not actual JSON code."
+        "4. Don't generate anything other than like the example output"
         "4. Use this format for the output:"
         "["
         "  {\"Answer\": 1, \"LogicalFlaw\": 0.9, \"Coverage\": 0.85, \"Confidence\": 0.9, \"Rationale\": 0.95},"
@@ -222,69 +281,63 @@ def select_best_answer(candidate_answers, question, temperature, token_limit, fe
         "1. Do not provide real JSON code."
         "2. Do not deviate from the required scoring dimensions or format."
         "3. Ensure the output is plain text that looks like JSON, but never in actual JSON syntax.\n\n"
+        "4. Don't generate anything else other than the json like results."
 
         # [Answers to Evaluate]
         "Answers:"
     )
 
-    # 将每个候选答案加入提示中
     for idx, answer in enumerate(candidate_answers):
         scoring_prompt += f"Answer {idx + 1}: {answer}\n"
 
-    # 调用 LLM 进行评分
+    # 3. **调用 LLM 进行评分**
     try:
         response = send_openai_prompt(
             scoring_prompt,
             temperature=temperature,
-            token_limit=10000
+            token_limit=token_limit
         )
         print(f"LLM Response: {response}")
     except Exception as e:
         print(f"Error during LLM call: {e}")
-        return None
+        return candidate_answers[0]  # 失败时返回默认答案
 
-    # 解析 LLM 返回的 JSON
     try:
-        scores = json.loads(response)  # 预期得到一个列表，每个元素包含各项评分
-        print("scores",scores)
-        # 只保留合法的评分项，并构建 answer_idx -> score_dict 的字典
+        # 解析 LLM JSON 响应
+        scores = json.loads(response)
+
+        # 构建有效评分字典
         valid_scores = {}
-        for score_entry in scores:
-            if ("Answer" in score_entry 
-                and isinstance(score_entry["Answer"], int) 
-                and 1 <= score_entry["Answer"] <= len(candidate_answers)):
-                answer_index = score_entry["Answer"] - 1
-                valid_scores[answer_index] = score_entry
+        for entry in scores:
+            if "Answer" in entry and isinstance(entry["Answer"], int):
+                answer_idx = entry["Answer"] - 1  # 转换为 0-based 索引
+                if 0 <= answer_idx < len(candidate_answers):  # 确保索引合法
+                    valid_scores[answer_idx] = entry
 
         if not valid_scores:
-            raise ValueError("No valid scores were extracted from the LLM response.")
+            raise ValueError("No valid scores extracted.")
+
     except (json.JSONDecodeError, ValueError) as e:
         print(f"Error parsing scores: {e}")
-        print(f"Raw response: {response}")
-        return None
+        return candidate_answers[0]  # 解析失败返回默认答案
 
-    # 针对每个候选答案，根据预先设定的权重加权求和，选出最佳答案
-    # 注意：LLM 返回的 JSON 中的键是 "LogicalFlaw", "Coverage", "Confidence", "Rationale"，
-    # 而 weights 中的键可能是 "logical_flaw", "coverage", "confidence", "rationale"，
-    # 因此需要进行映射以避免 KeyError。
+    # 定义 key 映射函数
     def map_key_to_response_field(key_name: str) -> str:
-        """
-        将 weight 中的 key（如 logical_flaw）映射到 LLM JSON 中对应的字段名（如 LogicalFlaw）。
-        比如：logical_flaw -> LogicalFlaw, coverage -> Coverage, 等。
-        """
-        # 先把下划线拆分，再分别首字母大写，最后拼回去
-        parts = key_name.split("_")
-        return "".join(word.capitalize() for word in parts)
-    
+        return "".join(word.capitalize() for word in key_name.split("_"))
+
+    # 计算最佳答案索引
     best_answer_idx = max(
         valid_scores.keys(),
         key=lambda idx: sum(
-            weights[key] * valid_scores[idx].get(map_key_to_response_field(key), 0.0)
-            for key in weights
+            weights[idx][i] * valid_scores[idx].get(map_key_to_response_field(k), 0.0)
+            for i, k in enumerate(["LogicalFlaw", "Coverage", "Confidence", "Rationale"])
         ),
     )
 
+    # 返回最佳答案
     return candidate_answers[best_answer_idx]
+
+
 
 
 
@@ -364,6 +417,7 @@ def evaluate_few_shot_with_multiple_responses(ts_model, task, shots, tokenizer, 
                 )
                 reward = improved_dense_reward(question_data['question'], ground_truth, best_candidate)
                 ts_model.update(context, reward, current_action)
+                preference_model.update(reward, question_data['question'], best_responses)
 
                 print(f"Few-shot Question {idx + 1}: Best Reward: {reward}")
                 print(f"Best Responses: {best_responses}")
@@ -466,9 +520,9 @@ def evaluate_few_shot_with_multiple_responses(ts_model, task, shots, tokenizer, 
 accuracy = evaluate_few_shot_with_multiple_responses(
     ts_model=few_shot_ts,
     task=all_task,
-    shots=40,
+    shots=100,
     tokenizer=tokenizer,
     hf_model=hf_model,
     max_attempts=3,
-    output_file="./results/RLCOTiter.json"
+    output_file="./new_results/RLCOT.json"
 )
