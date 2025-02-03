@@ -82,7 +82,7 @@ prompt_template = (
 
     "Diversity Requirements:"
     "Provided below are some previous generated content on this question, you must reason divergently and try your best not to generate duplicate answer and process. Make the final answer as diverse and different. "
-    "You must avoid concluding same result wih the previous generated content and provide new content."
+    "You need to try your best to avoid concluding same result wih the previous generated content and provide new content."
     "Preious contents: {previousones}"
 )
 
