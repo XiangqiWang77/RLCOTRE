@@ -427,5 +427,5 @@ accuracy = evaluate_few_shot_with_multiple_responses(
     tokenizer=tokenizer,
     hf_model=hf_model,
     max_attempts=3,
-    output_file="./results/0203.json"
+    output_file="./new_results/0203.json"
 )
