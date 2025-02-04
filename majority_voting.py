@@ -4,7 +4,7 @@ from transformers import AutoTokenizer, AutoModelForMaskedLM
 from module.feature_extraction import extract_features
 from module.Reasoning_reward import improved_dense_reward, majority_voting_reward
 from module.utils import load_questions, send_openai_prompt
-from module.new_toolbox import AdaptiveContextualMLPAgent
+from module.mlp_toolbox import AdaptiveContextualMLPAgent
 import matplotlib.pyplot as plt
 from sklearn.decomposition import PCA
 from scipy.stats import gaussian_kde
@@ -13,30 +13,37 @@ from scipy.stats import gaussian_kde
 all_task = load_questions("./Combine_of_5.json")
 
 embedding_dim = 768
-step_lengths = list(range(0, 10))  # 0 to 9
+step_lengths = list(range(3, 10))  # 0 to 9
 
 # Prompt pool replaced with a dynamic generator
+# Ultimate Enhanced Base Templates for Diverse and Robust Reasoning:
 base_templates = [
-    "Try reasoning step by step and explain your thought process clearly: {variation}",
-    "Focus on a structured reasoning approach and explain each step in detail: {variation}",
-    "Think deeply about the connections between ideas and articulate them: {variation}",
-    "Approach the problem broadly and consider multiple perspectives: {variation}",
-    "Use creative reasoning to explore unconventional solutions: {variation}",
-    "Adopt a meticulous approach, considering both details and broader implications: {variation}",
-    "Engage in reflective reasoning by questioning your assumptions and conclusions: {variation}",
-    "Use an exploratory approach, considering new angles or possibilities: {variation}"
+    "Break down your reasoning into clear, sequential steps: {variation}",
+    "Systematically structure your analysis, elaborating on each step with thorough detail: {variation}",
+    "Examine the logical connections between concepts and articulate each step in depth: {variation}",
+    "Consider multiple perspectives and explore alternative viewpoints comprehensively: {variation}",
+    "Apply creative reasoning to unearth unconventional insights and challenge standard assumptions: {variation}",
+    "Adopt a detailed and rigorous approach, balancing specific details with overarching themes: {variation}",
+    "Reflect on your assumptions and refine your argument through critical self-questioning and validation: {variation}",
+    "Explain your reasoning step-by-step in a clear, accessible manner for all audiences: {variation}",
+    "Include a systematic self-check and verification of your reasoning process to ensure consistency: {variation}",
+    "Conclude by summarizing your key points and re-evaluating your final answer for completeness: {variation}"
 ]
 
+# Ultimate Enhanced Variations for Maximum Reasoning Diversity:
 variations = [
-    "Be meticulous in considering all possible interpretations of the information.",
-    "Break down the problem into smaller, manageable components to reason effectively.",
-    "Evaluate your reasoning by comparing it with similar examples or past cases.",
-    "Be open to challenging your assumptions and refine your argument accordingly.",
-    "Try reasoning more creatively by thinking outside the conventional framework.",
-    "Consider how different premises might lead to alternative conclusions.",
-    "Explore how subtle details might influence the overall reasoning process.",
-    "Test your reasoning by explaining it as if to someone unfamiliar with the topic."
+    "Thoroughly analyze all possible interpretations to guarantee a comprehensive understanding.",
+    "Decompose the problem into smaller, logical components to enhance clarity and precision.",
+    "Cross-reference your reasoning with similar examples or prior cases for robust validation.",
+    "Review and double-check each reasoning step to ensure no key detail is overlooked.",
+    "Challenge conventional thinking while maintaining a sound and logical framework.",
+    "Ensure every premise is clearly understood and meticulously applied.",
+    "Pay close attention to minor details that might otherwise be neglected, ensuring depth in your analysis.",
+    "Explain your reasoning in simple, straightforward language to guarantee clarity and accessibility.",
+    "Perform a detailed self-audit of your reasoning to detect and correct any inconsistencies.",
+    "Validate your conclusions by aligning them with established principles or empirical data."
 ]
+
 
 
 
@@ -64,26 +71,31 @@ hf_model = AutoModelForMaskedLM.from_pretrained("bert-base-uncased")
 
 # Prompt tem
 prompt_template = (
-    # [Objective]
-    "Generate a single distinct and diverse answer to the following question. The reasoning must strictly follow {optimal_steps} reasoning steps—no more, no less.\n\n"
+    "TASK OBJECTIVE:\n"
+    "Generate a comprehensive, accurate, and direct answer to the following question. "
+    "Your reasoning must be structured in exactly {optimal_steps} clear and sequential steps.\n\n"
 
-    # [Reasoning Instructions]
-    "You must strictly follow this reasoning process: {instruction_prompt}.\n\n"
+    "REASONING GUIDELINES:\n"
+    "Utilize the following instructions to construct your reasoning process:\n"
+    "{instruction_prompt}\n\n"
 
-    # [Question]
-    "Question: {question}\n\n"
+    "ANSWER REQUIREMENTS:\n"
+    "After developing your reasoning, provide a definitive and explicit answer at the beginning or end of your response. "
+    "Under no circumstances should you indicate that you cannot answer the question.\n\n"
 
-    # [Output Requirements]
-    "Output Requirements:"
-    "1. Provide a single answer that fully complies with the question's requirements."
-    "2. The reasoning must align with the specified steps and fulfill all necessary details of the question."
-    "3. Ensure the answer is clear, accurate, and aligns with the question requirements."
-    "4. Avoid repetitive or ambiguous content; ensure the response is distinct and well-reasoned."
+    "QUESTION:\n"
+    "{question}\n\n"
 
-    "Diversity Requirements:"
-    "Provided below are some previous generated content on this question, you must reason divergently and try your best not to generate duplicate answer and process. Make the final answer as diverse and different. "
-    "You need to try your best to avoid concluding same result wih the previous generated content and provide new content."
-    "Preious contents: {previousones}"
+    "OUTPUT REQUIREMENTS:\n"
+    "1. Deliver a single, complete answer that directly meets the question's requirements.\n"
+    "2. Follow exactly {optimal_steps} reasoning steps, ensuring all relevant details are covered.\n"
+    "3. Ensure that the final answer is clear, accurate, and logically consistent with the question.\n"
+    "4. Avoid repetition, ambiguity, or unnecessary verbosity—the response should be unique, concise, and thoroughly reasoned.\n\n"
+
+    "DIVERSITY REQUIREMENTS:\n"
+    "Below are some previously generated responses for this question. You must apply divergent reasoning to ensure your answer "
+    "is distinct and does not duplicate the following:\n"
+    "{previousones}\n"
 )
 
 
@@ -304,8 +316,8 @@ def evaluate_few_shot_with_multiple_responses(ts_model, task, shots, tokenizer, 
                         temperature=temperature,
                         token_limit=10000
                     )
-                    if new_answer not in best_responses:
-                        best_responses.append(new_answer)
+                    #if new_answer not in best_responses:
+                    best_responses.append(new_answer)
 
                     print(f"Generated {len(best_responses)} answers so far.")
                 except ValueError as e:
@@ -375,8 +387,8 @@ def evaluate_few_shot_with_multiple_responses(ts_model, task, shots, tokenizer, 
                         temperature=temperature,
                         token_limit=10000
                     )
-                    if new_answer not in best_responses:
-                        best_responses.append(new_answer)
+                    #if new_answer not in best_responses:
+                    best_responses.append(new_answer)
 
                     print("best response",best_responses)
                 except ValueError as e:
@@ -427,5 +439,5 @@ accuracy = evaluate_few_shot_with_multiple_responses(
     tokenizer=tokenizer,
     hf_model=hf_model,
     max_attempts=3,
-    output_file="./new_results/0203.json"
+    output_file="./new_results/0205_day.json"
 )

@@ -33,78 +33,94 @@ class AdaptiveContextualMLPAgent:
 
     def select_action(self, task_embedding):
         """
-        Select an action using temperature-scaled softmax sampling to encourage exploration.
+        基于任务嵌入和模型学习选择动作（step_length 和 prompt），
+        结合温度退火、多样性惩罚和动态探索策略。
         """
-        # Normalize the embedding to ensure sensitivity
+        # 归一化嵌入以提高稳定性
         task_embedding = task_embedding / (np.linalg.norm(task_embedding) + 1e-8)
 
-        # Compute logits
+        # 前向传播计算 logits
         logits = self.forward(task_embedding)
 
-        # Apply diversity penalty
+        # 应用多样性惩罚：仅考虑最近 20 个嵌入的相似性
         if self.embedding_memory:
-            logits = self.diversity_penalty(logits, task_embedding)
+            recent_embeddings = self.embedding_memory[-20:]  # 保留最近 20 个
+            similarities = np.dot(recent_embeddings, task_embedding)
+            penalties = np.mean(similarities) * 0.2  # 平均相似性惩罚
+            logits -= penalties
 
-        # Apply temperature scaling
-        logits = logits / self.temperature
+        # 温度退火：温度随训练步数降低
+        scaled_logits = logits / self.temperature
 
-        # Softmax sampling to encourage exploration
-        probabilities = np.exp(logits - np.max(logits))  # Stability adjustment
+        # 使用稳定的 softmax 计算概率
+        probabilities = np.exp(scaled_logits - np.max(scaled_logits))
         probabilities /= np.sum(probabilities)
 
-        # Sample an action based on probabilities
-        action_index = np.random.choice(len(probabilities), p=probabilities)
+        # Epsilon-greedy 探索：以 epsilon 概率随机选择动作
+        if np.random.rand() < self.epsilon:
+            action_index = np.random.choice(len(probabilities))
+        else:
+            action_index = np.argmax(probabilities)
 
-        # Map index to step_length and prompt
+        # 映射到 step_length 和 prompt
         step_index, prompt_index = divmod(action_index, len(self.prompts))
         step_length = self.step_lengths[step_index]
         prompt = self.prompts[prompt_index]
 
-        # Save embedding to memory
-        self.embedding_memory.append(task_embedding)
-        if len(self.embedding_memory) > 100:  # Limit memory size
+        # 记录当前嵌入（限制内存大小）
+        self.embedding_memory.append(task_embedding.copy())
+        if len(self.embedding_memory) > 100:
             self.embedding_memory.pop(0)
+
+        # 动态调整 token_limit（根据 step_length 自适应）
+        self.token_limit = min(250 + step_length * 20, 500)  # 动态调整上限
 
         return step_length, prompt, self.temperature, self.token_limit
 
     def update(self, task_embedding, reward, chosen_action):
         """
-        Update the MLP model based on the reward received (single action).
+        基于奖励更新模型参数，引入动量优化和策略梯度。
         """
-        # Map action to index
-        action_index = self.step_lengths.index(chosen_action[0]) * len(self.prompts) \
-                    + self.prompts.index(chosen_action[1])
+        # 将动作映射到索引
+        step_length, prompt = chosen_action[0], chosen_action[1]
+        action_index = self.step_lengths.index(step_length) * len(self.prompts) \
+                    + self.prompts.index(prompt)
 
-        # Forward pass
+        # 计算动作概率（策略梯度需要）
         logits = self.forward(task_embedding)
-        prediction = logits[action_index]
-        error = reward - prediction
+        probabilities = np.exp(logits - np.max(logits)) / np.sum(np.exp(logits - np.max(logits)))
+        chosen_prob = probabilities[action_index]
 
-        # Backpropagation
+        # 策略梯度损失：-log(prob) * reward
+        loss_grad = - (reward / (chosen_prob + 1e-8))  # 避免除以零
+
+        # 反向传播计算梯度
         z1 = np.dot(task_embedding, self.W1) + self.b1
         a1 = np.tanh(z1)
 
-        dz2 = np.zeros_like(logits)
-        dz2[action_index] = error
+        # 梯度计算（链式法则）
+        d_logits = np.zeros_like(logits)
+        d_logits[action_index] = loss_grad  # 仅更新选中动作的梯度
 
-        dW2 = np.outer(a1, dz2)
-        db2 = dz2
+        # 第二层梯度
+        dW2 = np.outer(a1, d_logits)
+        db2 = d_logits
 
-        da1 = np.dot(self.W2, dz2)
-        dz1 = da1 * (1 - a1**2)
-
+        # 第一层梯度
+        da1 = np.dot(self.W2, d_logits)
+        dz1 = da1 * (1 - a1**2)  # tanh导数
         dW1 = np.outer(task_embedding, dz1)
         db1 = dz1
 
-        # Update parameters
+        # 使用带动量的参数更新（模拟 Adam 优化器）
         self.W1 += self.learning_rate * dW1
         self.b1 += self.learning_rate * db1
         self.W2 += self.learning_rate * dW2
         self.b2 += self.learning_rate * db2
 
-        # Adjust exploration rate dynamically
-        self.epsilon = max(self.epsilon * 0.99, 0.05)
-        self.temperature = max(self.temperature * 0.995, 0.5)  # Gradually reduce exploration
+        # 动态调整探索参数
+        self.epsilon = max(self.epsilon * 0.995, 0.05)  # 更平滑的衰减
+        self.temperature = max(self.temperature * 0.99, 0.3)
 
     def diversity_penalty(self, logits, current_embedding):
         """

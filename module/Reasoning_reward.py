@@ -216,3 +216,58 @@ def improved_dense_reward(question, correct_answer, reasoning_process, options=N
         reward = -1.0  # Default to penalty for invalid or unexpected response
     
     return reward
+
+
+def majority_voting_reward(question, correct_answer, best_responses):
+    """
+    Evaluates a set of responses using a scoring mechanism (0 to 1) by leveraging LLM.
+
+    Parameters:
+    - question (str): The original question being evaluated.
+    - correct_answer (str): The correct answer to the question.
+    - best_responses (list): A list of generated responses to be evaluated.
+
+    Returns:
+    - float: The average score (between 0 and 1) based on the LLM's evaluation.
+    """
+    
+    # Define the prompt template
+    prompt_template = (
+        "Question: {question}\n\n"
+        "Evaluate the correctness of the response based on the correct answer.\n"
+        "Provide a score from 0 to 1:\n"
+        "- 1.0: Fully correct\n"
+        "- 0.5: Mostly correct but with minor errors\n"
+        "- 0.0: Incorrect\n\n"
+        "Output only the score (0, 0.5, or 1.0) with no extra text.\n\n"
+        "Correct Answer: {correct_answer}\n"
+        "Response: {response}\n"
+    )
+
+    # Ensure we don't divide by zero
+    if not best_responses:
+        return 0.0
+
+    total_score = 0
+    valid_responses = 0
+    
+    for response in best_responses:
+        # Format the prompt for the current response
+        formatted_prompt = prompt_template.format(
+            question=question, correct_answer=correct_answer, response=response
+        )
+        
+        # Get the evaluation result from LLM
+        eval_response = send_openai_prompt(formatted_prompt).strip()
+
+        # Try to parse the response as a float
+        try:
+            score = float(eval_response)
+            if 0.0 <= score <= 1.0:  # Ensure the score is within the expected range
+                total_score += score
+                valid_responses += 1
+        except ValueError:
+            pass  # Ignore invalid responses
+
+    # Return the average score
+    return total_score / valid_responses if valid_responses > 0 else 0.0
