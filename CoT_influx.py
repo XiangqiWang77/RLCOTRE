@@ -5,6 +5,8 @@ import torch.optim as optim
 from tqdm import tqdm
 from transformers import AutoTokenizer, AutoModelForMaskedLM
 from module.utils import load_questions, send_openai_prompt
+from module.tools import get_response  # Added import for get_response
+import concurrent.futures
 
 # Load the dataset
 all_task = json.load(open("./data/shuffled_combined_HARDMATH.json"))
@@ -143,64 +145,50 @@ def prune_shots_and_tokens(task, shot_pruner_model, token_pruner_model, tokenize
     return pruned_shots
 
 
+prompt_template = (
+    "Please think step by step to solve the question:\n"
+    "Question: {question}\n\nAnswer:"
+)
 
-
-def evaluate_few_shot_single_save(task, shots, output_file, shot_pruner_model=None, token_pruner_model=None, tokenizer=None, model=None, llm="gpt-4o", mode="whole_dataset"):
-    """Evaluate the model on a dataset with few-shot prompting and save the results"""
-    correct_counts = []
-
+def evaluate_simple_cot_influx(task, shots, model, temperature=1.0, shot_pruner_model=None, token_pruner_model=None, tokenizer=None, model_obj=None, mode="whole_dataset"):
+    """Evaluate the model with Simple CoT input/output format and save the results."""
+    import os
+    out_dir = "results/cot_influx"
+    if not os.path.exists(out_dir):
+        os.makedirs(out_dir)
+    output_file = f"{out_dir}/{model}.json"
+    
     if mode == "few_shot":
-        # Few-shot specific evaluation
-        if shot_pruner_model and token_pruner_model and tokenizer and model:
-            shots = prune_shots_and_tokens(task, shot_pruner_model, token_pruner_model, tokenizer, model, shots)
-
-        retained_shots = len(shots)
-        print(f"Retained Shots (Few-shot Mode): {retained_shots}/{len(task)}")
-
+        if shot_pruner_model and token_pruner_model and tokenizer and model_obj:
+            shots = prune_shots_and_tokens(task, shot_pruner_model, token_pruner_model, tokenizer, model_obj, shots)
         evaluation_task = shots
+        print(f"Retained Shots (Few-shot Mode): {len(shots)}/{len(task)}")
     elif mode == "whole_dataset":
-        # Whole-dataset evaluation after training
         print(f"Evaluating on the whole dataset (Size: {len(task)})")
         evaluation_task = task
     else:
         raise ValueError("Invalid mode. Choose 'few_shot' or 'whole_dataset'.")
-
-    full_results = []
-    for idx, question_data in enumerate(evaluation_task):
-        prompt = (
-            "Please think step by step to solve the question:"
-            f"Question: {question_data['question']}Answer:"
-        )
-        response = send_openai_prompt(prompt, model_name=llm, temperature=0.7, token_limit=256)
-
-        print(response)
-        reasoning_steps = response.split("\n")
-        correct_option = question_data['answer']
-
-        # Calculate reward for each response
-        #reward = reward_function(
-        #    prediction=response.strip(),
-        #    #ground_truth=correct_option.strip(),
-        #    reasoning_steps=reasoning_steps,
-        #    llm=llm,
-        #    max_steps=5,
-        #    token_count=len(response.split()),
-        #    max_tokens=256
-        #)
-
-        result = {
+    
+    def process_question(question_data):
+        prompt = prompt_template.format(question=question_data['question'])
+        response = get_response(model=model, prompt=prompt, temperature=temperature)  # Use get_response instead
+        if not response:
+            predicted_reasoning = None
+        else:
+            predicted_reasoning = response.split("\n")
+        return {
             "question": question_data['question'],
-            "correct_option": correct_option,
-            "predicted_reasoning": reasoning_steps,
-            #"reward": reward
+            "correct_option": question_data['answer'],
+            "predicted_reasoning": predicted_reasoning,
         }
-        full_results.append(result)
-
-    # Save results to file
+    
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        results = list(tqdm(executor.map(process_question, evaluation_task), total=len(evaluation_task), desc="Processing With Simple CoT"))
+        
     with open(output_file, "w") as f:
-        json.dump(full_results, f, indent=4)
-
-    return full_results
+        json.dump(results, f, indent=4)
+    
+    return 0
 
 # Initialize and train pruner models
 shot_pruner_model = CustomPrunerModel()
@@ -213,14 +201,14 @@ train_pruner(all_task[:20], shot_pruner_model, tokenizer, hf_model, shot_optimiz
 # Load trained models
 shot_pruner_model.load_state_dict(torch.load("pruner_model.pth"))
 
-# Few-shot evaluation
-output_file = "results/full_dataset_results.json"
-evaluate_few_shot_single_save(
+# Few-shot evaluation using Simple CoT I/O format
+evaluate_simple_cot_influx(
     task=all_task,
     shots=20,
-    output_file=output_file,
+    model="gpt-4o",
+    temperature=0.7,
     shot_pruner_model=shot_pruner_model,
     token_pruner_model=token_pruner_model,
     tokenizer=tokenizer,
-    model=hf_model
+    model_obj=hf_model
 )

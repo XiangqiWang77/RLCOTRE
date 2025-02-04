@@ -1,5 +1,9 @@
 import argparse
+import os
+import sys
 from utils import *
+
+PROJECT_ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..")
 
 def cot(method, question):
     args = parse_arguments()
@@ -8,9 +12,9 @@ def cot(method, question):
     args.method = method
     if args.method != "zero_shot_cot":
         if args.method == "auto_cot":
-            args.demo_path = "E:/RLCOTRE/baselines/auto-cot-main/demos/multiarith_auto"
+            args.demo_path = "baselines/auto-cot-main/demos/multiarith_auto"
         else:
-            args.demo_path = "E:/RLCOTRE/baselines/auto-cot-main/demos/multiarith_auto"
+            args.demo_path = "baselines/auto-cot-main/demos/multiarith_auto"
         demo = create_demo_text(args, cot_flag=True)
     else:
         demo = None
