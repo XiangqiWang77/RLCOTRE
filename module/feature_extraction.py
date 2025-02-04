@@ -1,9 +1,8 @@
+import os
 import numpy as np
 import torch
 from transformers import AutoTokenizer, AutoModelForMaskedLM
 from sklearn.decomposition import PCA
-
-# 初始化全局模型和分词器
 tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
 hf_model = AutoModelForMaskedLM.from_pretrained("bert-base-uncased")
 

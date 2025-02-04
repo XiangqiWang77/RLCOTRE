@@ -1,6 +1,10 @@
 import json
+import sys
+import os
 from transformers import AutoTokenizer, AutoModelForMaskedLM
-
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.append(PROJECT_ROOT)
+print(PROJECT_ROOT)
 # 初始化全局模型
 tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
 hf_model = AutoModelForMaskedLM.from_pretrained("bert-base-uncased")

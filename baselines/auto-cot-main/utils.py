@@ -96,7 +96,7 @@ def decoder_for_gpt3(args, input, max_length):
         load_dotenv()
 
         # 获取 API Key
-        api_key = os.getenv('API_KEY')
+        api_key = os.getenv('OPENAI_API_KEY')
         from openai import OpenAI
         client = OpenAI(api_key=api_key)
         response = client.chat.completions.create(
