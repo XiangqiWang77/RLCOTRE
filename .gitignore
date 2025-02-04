@@ -1,2 +1,22 @@
-test.py
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Node.js
+node_modules/
+
+# Python
+__pycache__/
+*.py[cod]
 *.env
+
+# Logs and temporary files
+*.log
+temp/
+build/
+
+# IDE settings
+.idea/
+.vscode/
+
+test.py

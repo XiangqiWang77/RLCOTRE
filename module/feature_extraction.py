@@ -3,7 +3,6 @@ import numpy as np
 import torch
 from transformers import AutoTokenizer, AutoModelForMaskedLM
 from sklearn.decomposition import PCA
-os.environ['HF_TOKEN'] = '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'
 tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
 hf_model = AutoModelForMaskedLM.from_pretrained("bert-base-uncased")
 
