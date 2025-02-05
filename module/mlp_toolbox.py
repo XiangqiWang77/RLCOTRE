@@ -5,86 +5,100 @@ import pickle
 # Initialize semantic model for embedding-based evaluations
 semantic_model = SentenceTransformer('all-MiniLM-L6-v2')
 
+import numpy as np
+
 class AdaptiveContextualMLPAgent:
     def __init__(self, step_lengths, prompts, embedding_dim, hidden_dim=64, learning_rate=0.01, epsilon=0.2):
         self.step_lengths = step_lengths
-        self.prompts = prompts  # Dynamic prompt pool
+        self.prompts = prompts  # 动态 prompt 池
         self.embedding_dim = embedding_dim
         self.hidden_dim = hidden_dim
         self.learning_rate = learning_rate
-        self.epsilon = epsilon  # Initial exploration rate
+        self.epsilon = epsilon  # 初始探索率
 
-        # Initialize MLP parameters
+        # 定义温度候选值（离散选择）
+        self.temperature_options = np.array([0.2, 0.4, 0.6, 0.8, 1.0])  # 低温更 exploitation，高温更 exploration
+
+        # 初始化 MLP 参数
+        num_actions = len(step_lengths) * len(prompts) * len(self.temperature_options)  # 包括 temperature
         self.W1 = np.random.randn(self.embedding_dim, self.hidden_dim) * 0.01
-        self.b1 = np.zeros(self.hidden_dim)
-        self.W2 = np.random.randn(self.hidden_dim, len(step_lengths) * len(prompts)) * 0.01
-        self.b2 = np.zeros(len(step_lengths) * len(prompts))
+        self.b1 = np.random.randn(self.hidden_dim) * 0.01
+        self.W2 = np.random.randn(self.hidden_dim, num_actions) * 0.01
+        self.b2 = np.random.randn(num_actions) * 0.01
 
-        self.temperature = 1.0  # Higher temperature encourages exploration
         self.token_limit = 250
-        self.embedding_memory = []  # Store embeddings for diversity
+        self.embedding_memory = []  # 存储 embeddings 以便惩罚重复
 
     def forward(self, embedding):
-        """Forward pass through the MLP."""
+        """前向传播计算 logits"""
         z1 = np.dot(embedding, self.W1) + self.b1
-        a1 = np.tanh(z1)  # Using tanh activation
+        a1 = np.tanh(z1)  # 使用 tanh 激活
         z2 = np.dot(a1, self.W2) + self.b2
-        return z2  # Return logits for each action
+        return z2  # 返回 logits
 
     def select_action(self, task_embedding):
         """
-        基于任务嵌入和模型学习选择动作（step_length 和 prompt），
+        选择动作（step_length, prompt, temperature），
         结合温度退火、多样性惩罚和动态探索策略。
         """
         # 归一化嵌入以提高稳定性
         task_embedding = task_embedding / (np.linalg.norm(task_embedding) + 1e-8)
 
-        # 前向传播计算 logits
+        # 计算 logits
         logits = self.forward(task_embedding)
 
-        # 应用多样性惩罚：仅考虑最近 20 个嵌入的相似性
+        # 应用多样性惩罚：仅考虑最近 100 个嵌入
         if self.embedding_memory:
-            recent_embeddings = self.embedding_memory[-20:]  # 保留最近 20 个
+            recent_embeddings = self.embedding_memory[-100:]  
             similarities = np.dot(recent_embeddings, task_embedding)
-            penalties = np.mean(similarities) * 0.2  # 平均相似性惩罚
-            logits -= penalties
+            penalties = np.mean(similarities) * 0.2  
+            logits -= penalties  # 惩罚相似的 embeddings
 
-        # 温度退火：温度随训练步数降低
-        scaled_logits = logits / self.temperature
-
-        # 使用稳定的 softmax 计算概率
-        probabilities = np.exp(scaled_logits - np.max(scaled_logits))
+        # 计算 softmax 概率
+        probabilities = np.exp(logits - np.max(logits))
         probabilities /= np.sum(probabilities)
 
-        # Epsilon-greedy 探索：以 epsilon 概率随机选择动作
+        # Epsilon-greedy 探索
         if np.random.rand() < self.epsilon:
             action_index = np.random.choice(len(probabilities))
         else:
             action_index = np.argmax(probabilities)
 
-        # 映射到 step_length 和 prompt
-        step_index, prompt_index = divmod(action_index, len(self.prompts))
+        # 解析 action_index 对应的 step_length, prompt, temperature
+        num_step = len(self.step_lengths)
+        num_prompt = len(self.prompts)
+        num_temp = len(self.temperature_options)
+
+        step_index, remainder = divmod(action_index, num_prompt * num_temp)
+        prompt_index, temp_index = divmod(remainder, num_temp)
+
         step_length = self.step_lengths[step_index]
         prompt = self.prompts[prompt_index]
+        temperature = self.temperature_options[temp_index]  # 从候选温度选择
 
-        # 记录当前嵌入（限制内存大小）
+        # 记录 embedding 以保持多样性
         self.embedding_memory.append(task_embedding.copy())
         if len(self.embedding_memory) > 100:
             self.embedding_memory.pop(0)
 
-        # 动态调整 token_limit（根据 step_length 自适应）
-        self.token_limit = min(250 + step_length * 20, 500)  # 动态调整上限
+        # 动态调整 token_limit
+        self.token_limit = min(250 + step_length * 20, 500)
 
-        return step_length, prompt, self.temperature, self.token_limit
-
+        return step_length, prompt, temperature, self.token_limit
     def update(self, task_embedding, reward, chosen_action):
         """
         基于奖励更新模型参数，引入动量优化和策略梯度。
         """
-        # 将动作映射到索引
-        step_length, prompt = chosen_action[0], chosen_action[1]
-        action_index = self.step_lengths.index(step_length) * len(self.prompts) \
-                    + self.prompts.index(prompt)
+        # 解析动作
+        step_length, prompt, temperature = chosen_action  # 现在包含 temperature
+
+        # 找到 action_index
+        step_index = self.step_lengths.index(step_length)
+        prompt_index = self.prompts.index(prompt)
+        temp_index = np.where(self.temperature_options == temperature)[0][0]  # 找到 temperature 索引
+
+        action_index = step_index * len(self.prompts) * len(self.temperature_options) + \
+                    prompt_index * len(self.temperature_options) + temp_index
 
         # 计算动作概率（策略梯度需要）
         logits = self.forward(task_embedding)
@@ -118,9 +132,14 @@ class AdaptiveContextualMLPAgent:
         self.W2 += self.learning_rate * dW2
         self.b2 += self.learning_rate * db2
 
-        # 动态调整探索参数
-        self.epsilon = max(self.epsilon * 0.995, 0.05)  # 更平滑的衰减
-        self.temperature = max(self.temperature * 0.99, 0.3)
+        # **动态调整 epsilon（探索率）**
+        self.epsilon = max(self.epsilon * 0.995, 0.05)  # 平滑衰减探索
+
+        # **动态调整 temperature**
+        # 让 `temperature` 的更新受 reward 影响
+        new_temperature_index = np.clip(temp_index + (1 if reward > 0 else -1), 0, len(self.temperature_options) - 1)
+        self.temperature = self.temperature_options[new_temperature_index]
+
 
     def diversity_penalty(self, logits, current_embedding):
         """

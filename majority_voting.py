@@ -4,13 +4,13 @@ from transformers import AutoTokenizer, AutoModelForMaskedLM
 from module.feature_extraction import extract_features
 from module.Reasoning_reward import improved_dense_reward, majority_voting_reward
 from module.utils import load_questions, send_openai_prompt
-from module.mlp_toolbox import AdaptiveContextualMLPAgent
+from module.new_toolbox import AdaptiveContextualMLPAgent
 import matplotlib.pyplot as plt
 from sklearn.decomposition import PCA
 from scipy.stats import gaussian_kde
 
 # Load the dataset
-all_task = load_questions("./Combine_of_5.json")
+all_task = load_questions("./long_dataset/raw_files/preprocessing/Combine_of_5.json")
 
 embedding_dim = 768
 step_lengths = list(range(3, 10))  # 0 to 9
@@ -332,7 +332,8 @@ def evaluate_few_shot_with_multiple_responses(ts_model, task, shots, tokenizer, 
                     10000
                 )
                 reward = majority_voting_reward(question_data['question'], correct_answer=ground_truth, best_responses=best_responses)
-                ts_model.update(context, reward, current_action)
+                tem_action=step_length, prompt, temperature
+                ts_model.update(context, reward, tem_action)
 
                 print(f"Few-shot Question {idx + 1}: Best Reward: {reward}")
                 print(f"Best Responses: {best_responses}")
@@ -439,5 +440,5 @@ accuracy = evaluate_few_shot_with_multiple_responses(
     tokenizer=tokenizer,
     hf_model=hf_model,
     max_attempts=3,
-    output_file="./new_results/0205_day.json"
+    output_file="./new_results/0206.json"
 )
