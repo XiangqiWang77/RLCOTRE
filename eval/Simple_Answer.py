@@ -46,7 +46,7 @@ with open('data/Combine_of_5.json', 'r', encoding='utf-8') as f:
 
 accuracy = evaluate_simple_answer(
     task=all_task,
-    shots=1200,
-    model="gpt-4o-mini",
+    shots=100,
+    model="gpt-4o",
     temperature=1.0
 )

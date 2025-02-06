@@ -30,3 +30,4 @@ def debias_embeddings(embeddings):
     pca = PCA(n_components=1)
     bias_direction = pca.fit(embeddings).components_[0]
     return embeddings - np.outer(embeddings @ bias_direction, bias_direction)
+                                

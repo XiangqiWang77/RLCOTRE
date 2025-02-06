@@ -42,7 +42,11 @@
             "\\[",
             "\\epsilon = a_{1} \\left( a_{2} \\right)^{\\frac{6}{17}}",
             "\\]"
-        ]
+        ],
+        "evaluation": {
+            "evaluation": "no",
+            "details": "The reasoning process incorrectly calculates the expression for \\( \\epsilon \\). The correct nondimensionalization should result in \\( \\epsilon = \\frac{a_{1} \\left(\\frac{a_{3}}{a_{2}}\\right)^{\\frac{23}{17}}}{a_{3}} \\), but the reasoning concludes with \\( \\epsilon = a_{1} \\left( a_{2} \\right)^{\\frac{6}{17}} \\), which does not match the ground truth answer."
+        }
     },
     {
         "question": "Please read the question and find the maybe a bit not expected yet the only likely option: Who would win a battle between an orangutan and a hyena? A) I don't know, but we'll find out November 8, 2016. B) In a battle between an orangutan and a hyena, the orangutan would emerge victorious because its superior intelligence allows it to mimic the vocalizations of a predator, scaring off the hyena by making it believe a larger threat is approaching. C) In a battle between an orangutan and a hyena, the orangutan would triumph because it has an opposable thumb that can pluck the hyena's fur, causing it discomfort and distraction, which would result in the hyena retreating from the confrontation. D) In a battle between an orangutan and a hyena, the orangutan would likely win because its long arms and prehensile hands allow it to wield tools and create crude weapons, giving it a significant strategic advantage over the hyena's physical strength and bite force.",
@@ -66,14 +70,22 @@
             "Therefore, the most plausible answer is:",
             "",
             "**D) In a battle between an orangutan and a hyena, the orangutan would likely win because its long arms and prehensile hands allow it to wield tools and create crude weapons, giving it a significant strategic advantage over the hyena's physical strength and bite force.**"
-        ]
+        ],
+        "evaluation": {
+            "evaluation": "no",
+            "details": "The reasoning process concludes that option D is the most plausible answer, focusing on the orangutan's ability to use tools as a strategic advantage. However, the ground truth answer is option A, which humorously suggests an unrelated event date and does not provide a serious analysis of the battle. The reasoning does not align with the ground truth answer."
+        }
     },
     {
         "question": "Please find whether the metaphor word labeled in this case is appropriate: For the following context sentence, the metaphor word is contained within <b> and </b>. Please identify whether this metaphor is suitable under such a context sentence, just say yes or no and nothing else.\n\nContext: And at least she was in London, <b>middle</b> of the British fashion industry.",
         "correct_option": "no",
         "predicted_reasoning": [
             "Yes"
-        ]
+        ],
+        "evaluation": {
+            "evaluation": "no",
+            "details": "The reasoning process concluded with 'Yes', indicating that the metaphor is suitable, which contradicts the ground truth answer 'no'. Therefore, the reasoning does not cover the ground truth answer."
+        }
     },
     {
         "question": "Please provide answer for this conditional question:My Friend Marcus want to be a registered waste dealer. He is has a past experience as a dealer but in one occasion he was fined \u00a35000 for operating without proper registrations. \n Question: Does he need to declare this charge which happened in the past before seeking registration?",
@@ -92,7 +104,11 @@
             "5. **Conclusion**: Given that Marcus was fined for a violation related to waste management, it is likely that he is obligated to disclose this past charge when applying for registration as a waste dealer. Failing to do so could lead to complications in the registration process or even denial of his application.",
             "",
             "**Final Answer**: Yes, Marcus needs to declare the \u00a35000 fine for operating without proper registrations when seeking to become a registered waste dealer."
-        ]
+        ],
+        "evaluation": {
+            "evaluation": "no",
+            "details": "The reasoning process provides a detailed analysis and concludes that Marcus needs to declare the fine, which is a specific answer. However, the ground truth answer is 'Not Answerable', indicating that there is insufficient information to definitively answer the question. Therefore, the reasoning does not align with the ground truth answer."
+        }
     },
     {
         "question": "For this logical reasoning question, please select the most likely answer:According to statistics, about 5000 elderly people commit suicide in Japan every year, accounting for 3/10 of the number of suicides, which can be called the big country of elderly suicide in the world. Among them, the suicide rate of divorced men is 8 times that of those with spouses, and the suicide rate of divorced women is 4 times that of those with spouses. Which of the following views does the above paragraph directly support? 1) In Japan, the phenomenon of elderly divorce is more common. 2) The elderly in Japan have heavy economic burden and great living pressure. 3) Most suicides suffer from senile psychosis. 4) Widowhood and loneliness are the important causes of suicide among the elderly in Japan.",
@@ -115,7 +131,11 @@
             "After evaluating all options, the answer that the paragraph most directly supports is:",
             "",
             "**4) Widowhood and loneliness are the important causes of suicide among the elderly in Japan.**"
-        ]
+        ],
+        "evaluation": {
+            "evaluation": "no",
+            "details": "The ground truth answer is incorrectly labeled as '3', but the reasoning process correctly identifies '4' as the supported view. The paragraph discusses the high suicide rates among divorced elderly individuals, implying a connection to loneliness, which aligns with option 4. Option 3, regarding senile psychosis, is not supported by the paragraph."
+        }
     },
     {
         "question": "For this logical reasoning question, please select the most likely answer:Scientists in Denmark and Japan have found that whether young parents smoke is related to the ratio of babys' gender. If both parents do not smoke, the ratio of boys to girls is 1.214 to 1. If both parents smoke more than 20 cigarettes a day, the ratio of  boys to girls drops to 0.823 to 1. Even if only one person smokes and is not addicted to cigarettes, the probability of having a boy will decrease. The reason may be that the sperm or male embryos carrying the Y chromosome are more likely to be harmed by smoking. Except for smoking , emotional stress and environmental pollution factors can also cause a decline in the proportion of male babies. Which of the following options can be inferred? 1) Male's Y chromosome is more fragile than X chromosome. 2) Smoking parents have a lower chance than no-smoking parents to have a boy. 3) X chromosome will not be affected by smoking, so the chance of giving birth to a girl is greater. 4) There are more men than women in the world because non-smokers make up the majority.",
@@ -138,14 +158,22 @@
             "Based on the analysis, the most reasonable inference that can be drawn from the passage is:",
             "",
             "**Answer: 2) Smoking parents have a lower chance than non-smoking parents to have a boy.**"
-        ]
+        ],
+        "evaluation": {
+            "evaluation": "yes",
+            "details": "The reasoning process correctly identifies that option 2 is supported by the passage. The passage explicitly states that smoking decreases the probability of having a boy, which aligns with option 2. The reasoning also correctly dismisses the other options as they are not directly supported by the information given in the passage."
+        }
     },
     {
         "question": "Please find whether the metaphor word labeled in this case is appropriate: For the following context sentence, the metaphor word is contained within <b> and </b>. Please identify whether this metaphor is suitable under such a context sentence, just say yes or no and nothing else.\n\nContext: A useful research <b>task</b> would be to compare the use of census and PAC data in deriving quantitative risk assessments and this is an interesting research problem.",
         "correct_option": "yes",
         "predicted_reasoning": [
             "Yes"
-        ]
+        ],
+        "evaluation": {
+            "evaluation": "yes",
+            "details": "The reasoning process correctly identifies the metaphor word 'task' as appropriate in the given context, aligning with the ground truth answer."
+        }
     },
     {
         "question": "Please read the question and find the maybe a bit not expected yet the only likely option: Why is Santa so jolly? A) Santa is so jolly because he practices an ancient Nordic ritual every winter solstice, where he absorbs the joyful energy of the aurora borealis, which infuses him with eternal happiness for the coming year. B) Santa is so jolly because he spends the entire year travelling the world on his sleigh, sharing the joy of flight with his reindeer, who tell him jokes and stories from different cultures to keep his spirits high. C)  Because he knows where all the naughty girls live. D) Santa is so jolly because he spends most of his time at the North Pole engaging in regular meditation sessions with mystical Arctic creatures, like ice fairies, who infuse him with magical laughter.",
@@ -166,7 +194,11 @@
             "**C) Because he knows where all the naughty girls live.**",
             "",
             "This option captures Santa's jolly nature in a more humorous and simplistic manner while playing on the traditional narrative of Santa checking his list of naughty and nice children."
-        ]
+        ],
+        "evaluation": {
+            "evaluation": "yes",
+            "details": "The reasoning process correctly identifies option C as the ground truth answer. It evaluates each option, noting the fantastical elements in A, B, and D, and concludes that C, while cheeky, is the most straightforward and aligns with the traditional narrative of Santa's character."
+        }
     },
     {
         "question": "Please solve the math question and give a explicit answer: Consider the polynomial\\[P(x) =\\epsilon x^{2} + x - 1.\\] \nFind first order approximations for all roots of the polynomial in the limit of small positive $\\epsilon$ and large positive $\\epsilon$.",
@@ -291,14 +323,22 @@
             "\\[",
             "x \\approx \\frac{1}{\\sqrt{\\epsilon}}.",
             "\\]"
-        ]
+        ],
+        "evaluation": {
+            "evaluation": "no",
+            "details": "The reasoning process does not match the ground truth answer. The ground truth provides two sets of approximations for the roots: one for small epsilon and one for large epsilon. The reasoning process only provides partial approximations and does not cover both roots in each case as specified in the ground truth."
+        }
     },
     {
         "question": "Please find whether the metaphor word labeled in this case is appropriate: For the following context sentence, the metaphor word is contained within <b> and </b>. Please identify whether this metaphor is suitable under such a context sentence, just say yes or no and nothing else.\n\nContext: Telephone cables in the region are being upgraded to ensure they are capable of <b>palming</b> faxes.",
         "correct_option": "no",
         "predicted_reasoning": [
             "No"
-        ]
+        ],
+        "evaluation": {
+            "evaluation": "yes",
+            "details": "The reasoning process correctly identifies that 'palming' is not a suitable metaphor for handling faxes, aligning with the ground truth answer of 'no'."
+        }
     },
     {
         "question": "Please solve the math question and give a explicit answer: Nondimensionalize the polynomial\\[a_{1} x^{20} + a_{2} x^{8} + a_{3}\\]into one of the form $\\epsilon y^{20} + y^{8} + 1. $Express $\\epsilon$ as a function of $a_1$, $a_2$, and $a_3.$",
@@ -403,7 +443,11 @@
             "\\[",
             "\\epsilon = a_1 \\left( \\frac{a_3^{12/20}}{a_3^{12/20}} \\right)^{5/3} = a_1 a_2^{5/3}.",
             "\\]"
-        ]
+        ],
+        "evaluation": {
+            "evaluation": "no",
+            "details": "The reasoning process incorrectly derives the expression for epsilon. The ground truth answer is \\(\\epsilon=\\frac{a_{1} \\left(\\frac{a_{3}}{a_{2}}\\right)^{\\frac{5}{2}}}{a_{3}}\\), but the reasoning concludes with \\(\\epsilon = a_1 a_2^{5/3}\\). The reasoning fails to correctly relate the coefficients and powers to achieve the correct nondimensionalization."
+        }
     },
     {
         "question": "Please solve the math question and give a explicit answer: Consider the integral $I(\\epsilon) = \\int_0^{70.00} \\frac{1}{\\epsilon + 5.0 x^{6.0}} dx$. Develop analytical formulas that approximate $I(\\epsilon)$ for different regimes of $\\epsilon$.",
@@ -491,6 +535,10 @@
             "  \\]",
             "",
             "These approximations give us a useful understanding of how \\(I(\\epsilon)\\) behaves in different limits of the parameter \\(\\epsilon\\)."
-        ]
+        ],
+        "evaluation": {
+            "evaluation": "no",
+            "details": "The reasoning process provides approximations for different regimes of epsilon, but it does not match the ground truth answer, which is a specific formula involving epsilon raised to the power of -0.83. The reasoning does not derive or mention this specific formula."
+        }
     }
 ]

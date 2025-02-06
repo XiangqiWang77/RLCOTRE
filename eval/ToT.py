@@ -55,23 +55,36 @@ def robust_parse_json(text):
                 print("Regex extraction JSON parse error:", e)
         return None
 
-def improved_dense_reward(model, question, reasoning_process, options=None, temperature=1.0):
+def improved_dense_reward(model, question, reasoning_process, temperature=1.0):
     """
     Evaluate the reasoning process without relying on ground truth answers.
     """
     prompt = (
         f"Question: {question}\n\n"
-        "Your task is to evaluate the following reasoning process. "
-        "Please output a valid JSON with the following keys and values (all values should be floats between 0 and 1):\n"
-        "  - LogicalFlaw: Evaluate the logical consistency and absence of errors.\n"
-        "  - Coverage: Evaluate how well the reasoning covers all relevant aspects of the question.\n"
-        "  - Confidence: Rate your confidence in the correctness of the reasoning.\n"
-        "  - Rationale: Assess the quality of the explanation provided.\n\n"
+        "You will evaluate the following reasoning process based on specific dimensions.\n"
+        "Then you will provide a set of scores in a specific plain-text format that resembles JSON.\n\n"
+
+        "Evaluation Dimensions:\n"
+        "1. **Logical Flaw** (0 to 1): Assess the logical consistency of the reasoning.\n"
+        "2. **Coverage** (0 to 1): Evaluate how thoroughly the reasoning addresses all relevant aspects.\n"
+        "3. **Confidence** (0 to 1): Rate your confidence in the correctness of the reasoning.\n"
+        "4. **Rationale** (0 to 1): Judge the overall explanation and clarity.\n\n"
+
         "Output Requirements:\n"
-        "  - Output must be a valid JSON string, for example:\n"
-        '    {"LogicalFlaw": 0.9, "Coverage": 0.85, "Confidence": 0.9, "Rationale": 0.95}\n\n'
+        "1. Provide a single set of scores using the following format (plain text, not valid JSON):\n"
+        "{\n"
+        "  \"LogicalFlaw\": 0.9,\n"
+        "  \"Coverage\": 0.85,\n"
+        "  \"Confidence\": 0.9,\n"
+        "  \"Rationale\": 0.95\n"
+        "}\n"
+        "2. Do not deviate from the defined dimensions or format.\n\n"
+
+        "Prohibited Actions:\n"
+        "1. Do not output valid JSON.\n"
+        "2. Do not use extra fields or dimensions outside the four listed.\n\n"
+
         f"Reasoning Process: {reasoning_process}\n"
-        f"Options (if any): {options}\n"
     )
     
     response = get_response(model=model, prompt=prompt, temperature=temperature)
@@ -89,14 +102,14 @@ def improved_dense_reward(model, question, reasoning_process, options=None, temp
         print("Missing key in evaluation response:", e)
         return -1.0
 
-def evaluate_path(model, question, reasoning_process, options=None, temperature=1.0):
+def evaluate_path(model, question, reasoning_process, temperature=1.0):
     """
     Evaluate the reasoning process using the improved_dense_reward function.
     """
-    score = improved_dense_reward(model, question=question, reasoning_process=reasoning_process, options=options, temperature=temperature)
+    score = improved_dense_reward(model, question=question, reasoning_process=reasoning_process, temperature=temperature)
     return score
 
-def tree_of_thoughts_search(model, question, options=None, temperature=1.0):
+def tree_of_thoughts_search(model, question, temperature=1.0):
     """
     Execute the Tree of Thoughts search process and return the best reasoning path and its score.
     """
@@ -125,7 +138,7 @@ def tree_of_thoughts_search(model, question, options=None, temperature=1.0):
         
         scored_paths = []
         with ThreadPoolExecutor(max_workers=NUM_WORKERS) as eval_executor:
-            eval_futures = {eval_executor.submit(evaluate_path, model, question, path_text, options, temperature): path_text
+            eval_futures = {eval_executor.submit(evaluate_path, model, question, path_text, temperature=temperature): path_text
                             for path_text in new_paths}
             for future in as_completed(eval_futures):
                 path_text = eval_futures[future]
@@ -159,8 +172,7 @@ def evaluate_tot(model, task, shots, temperature=1.0):
     # Helper function to process each question
     def process_question(idx, question_data):
         question = question_data["question"]
-        options = question_data.get("options", None)
-        best_path, best_score = tree_of_thoughts_search(model, question, options=options, temperature=temperature)
+        best_path, best_score = tree_of_thoughts_search(model, question, temperature=temperature)
         predicted_reasoning = best_path.split("\n")
         print(f"Processed question {idx + 1}/{len(task)}")
         return {
