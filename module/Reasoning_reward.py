@@ -271,3 +271,72 @@ def majority_voting_reward(question, correct_answer, best_responses):
 
     # Return the average score
     return total_score / valid_responses if valid_responses > 0 else 0.0
+
+
+def majority_voting_reward_v2(question, correct_answer, best_responses, options=None):
+    """
+    利用 LLM 对一组候选推理进行评估，判断其中是否有任一步骤包含或逻辑推出了正确答案。
+    这里允许 LLM 输出 "yes"、"no" 或 "0.5"（或 "half"）来表示部分正确。
+    最终得分为所有有效候选推理的平均得分。
+
+    参数：
+    - question (str): 要评估的问题文本。
+    - correct_answer (str): 问题的正确答案。
+    - best_responses (list): 候选推理列表，每个元素代表一次生成的推理过程。
+    - options (可选): 对于选择题，可传入候选项（例如列表或字符串），默认为 None。
+
+    返回：
+    - float: 平均得分（介于 0 和 1 之间）。
+    """
+    
+    if not best_responses:
+        return 0.0
+
+    # 如果提供了选项，则构造选项字符串
+    options_str = f" (Options: {options})" if options else ""
+
+    # 使用新的 prompt 模板（注意：这里提示 LLM 输出 "yes"/"no"/"0.5"）
+    prompt_template = (
+        "Strictly determine if ANY reasoning step CONTAINS or LOGICALLY LEADS TO the correct answer. Follow these criteria:\n\n"
+        "# Judgment Rules (MUST FOLLOW)\n"
+        "1. Content Match: Accept different numerical formats (0.5=50%=1/2) or unit variations\n"
+        "2. Logical Derivation: Verify if steps mathematically/ logically imply the answer\n"
+        "3. Option Substance: For MCQs, match answer CONTENT not just labels (e.g. \"Option B\" vs actual answer text)\n"
+        "4. Partial Evidence: Check if key components appear across multiple steps\n"
+        "5. Semantic Equivalence: Recognize paraphrased answers with identical meaning\n\n"
+        "# Question\n{question}\n\n"
+        "# Required Answer\n{correct_answer}{options_str}\n\n"
+        "# Candidate Reasoning\n{reasoning_process}\n\n"
+        "Just output yes, no, or 0.5 (or 'half') and don't output anything else beside that.\n\n"
+        "Final verdict (only 'yes'/'no'/'0.5'):"
+        "Output nothing else despite yes, no or 0.5. "
+    )
+
+    total_score = 0
+    valid_responses = 0
+    
+    for reasoning in best_responses:
+        formatted_prompt = prompt_template.format(
+            question=question,
+            correct_answer=correct_answer,
+            options_str=options_str,
+            reasoning_process=reasoning
+        )
+        
+        eval_response = send_openai_prompt(formatted_prompt).strip().lower()
+        
+        # 判断返回值，并给予相应分数：
+        if eval_response in {"yes", "1", "1.0"}:
+            score = 1.0
+        elif eval_response in {"no", "0", "0.0"}:
+            score = 0.0
+        elif eval_response in {"0.5", "half"}:
+            score = 0.5
+        else:
+            # 对于不符合预期的输出，忽略该次评分
+            continue
+        
+        total_score += score
+        valid_responses += 1
+
+    return total_score / valid_responses if valid_responses > 0 else 0.0

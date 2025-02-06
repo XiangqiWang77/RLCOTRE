@@ -8,7 +8,7 @@ semantic_model = SentenceTransformer('all-MiniLM-L6-v2')
 import numpy as np
 
 class AdaptiveContextualMLPAgent:
-    def __init__(self, step_lengths, prompts, embedding_dim, hidden_dim=64, learning_rate=0.01, epsilon=0.2):
+    def __init__(self, step_lengths, prompts, embedding_dim, hidden_dim=64, learning_rate=0.01, epsilon=0.5):
         self.step_lengths = step_lengths
         self.prompts = prompts  # 动态 prompt 池
         self.embedding_dim = embedding_dim
@@ -49,13 +49,17 @@ class AdaptiveContextualMLPAgent:
 
         # 应用多样性惩罚：仅考虑最近 100 个嵌入
         if self.embedding_memory:
-            recent_embeddings = self.embedding_memory[-100:]  
+            recent_embeddings = self.embedding_memory[-100:]
             similarities = np.dot(recent_embeddings, task_embedding)
-            penalties = np.mean(similarities) * 0.2  
-            logits -= penalties  # 惩罚相似的 embeddings
+            penalties = np.mean(similarities) * 0.2
+            logits -= penalties
+
+        # 使用当前温度对 logits 进行缩放（若未设置 self.temperature，则默认为1.0）
+        current_temp = getattr(self, 'temperature', 1.0)
+        scaled_logits = logits / current_temp
 
         # 计算 softmax 概率
-        probabilities = np.exp(logits - np.max(logits))
+        probabilities = np.exp(scaled_logits - np.max(scaled_logits))
         probabilities /= np.sum(probabilities)
 
         # Epsilon-greedy 探索
@@ -74,7 +78,8 @@ class AdaptiveContextualMLPAgent:
 
         step_length = self.step_lengths[step_index]
         prompt = self.prompts[prompt_index]
-        temperature = self.temperature_options[temp_index]  # 从候选温度选择
+        # 此处选取的 temperature 为候选温度（后续 update 会对 self.temperature 进行平滑更新）
+        candidate_temperature = self.temperature_options[temp_index]
 
         # 记录 embedding 以保持多样性
         self.embedding_memory.append(task_embedding.copy())
@@ -84,25 +89,24 @@ class AdaptiveContextualMLPAgent:
         # 动态调整 token_limit
         self.token_limit = min(250 + step_length * 20, 500)
 
-        return step_length, prompt, temperature, self.token_limit
+        return step_length, prompt, candidate_temperature, self.token_limit
     def update(self, task_embedding, reward, chosen_action):
         """
         基于奖励更新模型参数，引入动量优化和策略梯度。
         """
         # 解析动作
-        step_length, prompt, temperature = chosen_action  # 现在包含 temperature
-
-        # 找到 action_index
+        step_length, prompt, temperature = chosen_action  # 包含 temperature
         step_index = self.step_lengths.index(step_length)
         prompt_index = self.prompts.index(prompt)
-        temp_index = np.where(self.temperature_options == temperature)[0][0]  # 找到 temperature 索引
+        temp_index = np.where(self.temperature_options == temperature)[0][0]
 
         action_index = step_index * len(self.prompts) * len(self.temperature_options) + \
                     prompt_index * len(self.temperature_options) + temp_index
 
         # 计算动作概率（策略梯度需要）
         logits = self.forward(task_embedding)
-        probabilities = np.exp(logits - np.max(logits)) / np.sum(np.exp(logits - np.max(logits)))
+        probabilities = np.exp(logits - np.max(logits))
+        probabilities /= np.sum(np.exp(logits - np.max(logits)))
         chosen_prob = probabilities[action_index]
 
         # 策略梯度损失：-log(prob) * reward
@@ -122,7 +126,7 @@ class AdaptiveContextualMLPAgent:
 
         # 第一层梯度
         da1 = np.dot(self.W2, d_logits)
-        dz1 = da1 * (1 - a1**2)  # tanh导数
+        dz1 = da1 * (1 - a1**2)  # tanh 导数
         dW1 = np.outer(task_embedding, dz1)
         db1 = dz1
 
@@ -132,13 +136,20 @@ class AdaptiveContextualMLPAgent:
         self.W2 += self.learning_rate * dW2
         self.b2 += self.learning_rate * db2
 
-        # **动态调整 epsilon（探索率）**
-        self.epsilon = max(self.epsilon * 0.995, 0.05)  # 平滑衰减探索
+        # 动态调整 epsilon：放缓衰减速度，保持更多探索
+        self.epsilon = max(self.epsilon * 0.9999, 0.05)
 
-        # **动态调整 temperature**
-        # 让 `temperature` 的更新受 reward 影响
-        new_temperature_index = np.clip(temp_index + (1 if reward > 0 else -1), 0, len(self.temperature_options) - 1)
-        self.temperature = self.temperature_options[new_temperature_index]
+        # 动态调整 temperature：
+        # 根据 reward 调整选定 temperature 对应的候选索引，使用 EMA 平滑更新 self.temperature
+        current_temp_index = temp_index
+        new_temp_index = np.clip(current_temp_index + (1 if reward > 0 else -1), 0, len(self.temperature_options) - 1)
+        new_temp_candidate = self.temperature_options[new_temp_index]
+        if hasattr(self, 'temperature'):
+            # EMA 平滑更新（权重比例可根据需要微调）
+            self.temperature = 0.9 * self.temperature + 0.1 * new_temp_candidate
+        else:
+            self.temperature = new_temp_candidate
+
 
 
     def diversity_penalty(self, logits, current_embedding):

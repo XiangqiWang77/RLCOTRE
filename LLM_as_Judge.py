@@ -1,12 +1,5 @@
 import json
-import os
-from dotenv import load_dotenv
-
-# 加载 .env 文件
-load_dotenv()
-
-# 获取 API Key
-api_key = os.getenv('API_KEY')
+api_key = OPENAI_API
 
 # 加载问题
 
@@ -54,30 +47,42 @@ def send_openai_prompt(prompt_text, model_name="gpt-4o", temperature=0.7, top_p=
 
 # 简单奖励函数，检查推理过程是否包括正确答案
 
-def simple_reward(question, correct_answer, reasoning_process, options=None):
-    prompt = (
-        f"Please check whether these reasoning results successfully or partially successfully output the ground truth answer of the given question.\n"
-        f"Please carefully examine the reasoning steps and output and identify whether the correct answer is covered within the given process.\n"
-        f"Note that if the reasoning process and answer covers the ground truth count as yes.\n"
-        f"Question: {question}\n"
-        f"Correct Answer or Option: {correct_answer}\n"
-        f"Reasoning Process (all of them): {reasoning_process}\n"
-        f"Options if any: {options}\n"
-        f"Answer with 'yes' or 'no'. Just 'yes' and 'no'. No explanation or other things."
-    )
-    response = send_openai_prompt(prompt)
-    return response
+def robust_reward_v2(question, correct_answer, reasoning_process, options=None):
+    prompt = f"""Strictly determine if ANY reasoning step CONTAINS or LOGICALLY LEADS TO the correct answer. Follow these criteria:
+
+# Judgment Rules (MUST FOLLOW)
+1. Content Match: Accept different numerical formats (0.5=50%=1/2) or unit variations
+2. Logical Derivation: Verify if steps mathematically/ logically imply the answer
+3. Option Substance: For MCQs, match answer CONTENT not just labels (e.g. "Option B" vs actual answer text)
+4. Partial Evidence: Check if key components appear across multiple steps
+5. Semantic Equivalence: Recognize paraphrased answers with identical meaning
+
+# Question
+{question}
+
+# Required Answer
+{correct_answer}{f" (Options: {options})" if options else ""}
+
+# Candidate Reasoning
+{reasoning_process}
+
+Just output yes or no and don't output anything else beside that.
+
+Final verdict (only 'yes'/'no'):"""
+
+    response = send_openai_prompt(prompt).strip().lower()
+    return 'yes' if response[:1] == 'y' else 'no'
 
 # 测试代码
 if __name__ == "__main__":
-    input_file = './results/RLCOTfinal.json'
-    output_file = './LLM_as_Judge/RLCOT_Judge.json'
+    input_file = './new_results/0206filter.json'
+    output_file = '0206new_Judge.json'
     
     data = load_questions(input_file)
     
     for item in data:
         if item["best_candidate"]:
-            result = simple_reward(
+            result = robust_reward_v2(
                 question=item["question"],
                 correct_answer=item["ground_truth"],
                 reasoning_process=item["best_candidate"]
@@ -86,6 +91,7 @@ if __name__ == "__main__":
                 "question": item["question"],
                 "correct_option": item["ground_truth"],
                 "predicted_reasoning": item["best_candidate"],
+                "current_action": item["current_action"],
                 "evaluation": result
             }
             append_result(result_entry, output_file)
