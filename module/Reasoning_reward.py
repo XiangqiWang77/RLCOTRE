@@ -340,3 +340,76 @@ def majority_voting_reward_v2(question, correct_answer, best_responses, options=
         valid_responses += 1
 
     return total_score / valid_responses if valid_responses > 0 else 0.0
+
+
+import torch
+from transformers import AutoModelForSequenceClassification, AutoTokenizer
+
+# 加载模型和分词器
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+model_name = "OpenAssistant/reward-model-deberta-v3-large"
+model = AutoModelForSequenceClassification.from_pretrained(model_name).to(device)
+tokenizer = AutoTokenizer.from_pretrained(model_name)
+
+def compute_reward_score(question: str, candidate: str) -> float:
+    """
+    使用 OpenAssistant/reward-model-deberta-v3-large-v2 模型计算奖励分数。
+    """
+    # 将输入格式化为对话
+    inputs = tokenizer(question, candidate, return_tensors="pt", truncation=True, max_length=512).to(device)
+    with torch.no_grad():
+        outputs = model(**inputs)
+    # 从模型的输出中提取奖励分数
+    reward_score = outputs.logits.squeeze().item()
+    return reward_score
+
+def evaluate_responses(question: str, best_responses: list) -> float:
+    """
+    使用奖励模型评估候选回答。
+    """
+    if not best_responses:
+        return 0.0
+
+    total_score = 0.0
+    valid_count = 0
+
+    for candidate in best_responses:
+        # 计算奖励分数
+        score = compute_reward_score(question, candidate)
+        total_score += score
+        valid_count += 1
+
+    #print(total_score / valid_count if valid_count > 0 else 0.0)
+    return total_score / valid_count if valid_count > 0 else 0.0
+
+def compute_reward_score1(question: str, candidate: str, ground_truth: str) -> float:
+    """
+    使用 OpenAssistant/reward-model-deberta-v3-large 模型计算候选回答与参考答案的匹配度得分。
+    """
+    # 将输入格式化为对话
+    inputs = tokenizer(question, candidate, ground_truth, return_tensors="pt", truncation=True, max_length=512).to(device)
+    with torch.no_grad():
+        outputs = model(**inputs)
+    # 从模型的输出中提取奖励分数
+    reward_score = outputs.logits.squeeze().item()
+    return reward_score
+
+def evaluate_responses1(question: str, ground_truth: str, best_responses: list) -> float:
+    """
+    使用奖励模型评估候选回答与参考答案的匹配度。
+    """
+    if not best_responses:
+        return 0.0
+
+    total_score = 0.0
+    valid_count = 0
+
+    for candidate in best_responses:
+        # 计算奖励分数
+        score = compute_reward_score1(question, candidate, ground_truth)
+        total_score += score
+        valid_count += 1
+
+    average_score = total_score / valid_count if valid_count > 0 else 0.0
+    print(average_score)
+    return average_score
