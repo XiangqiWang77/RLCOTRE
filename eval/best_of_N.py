@@ -103,8 +103,10 @@ def evaluate_best_of_N(task, shots, model, temperature=1.0, N=5):
         q_text = question_data['question']
         prompt = prompt_template.format(question=q_text)
         responses = []
+        temperatures = np.linspace(0.1, 1.0, N)  # Evenly distribute temperatures based on N
         for i in range(N):
-            response = get_response(model=model, prompt=prompt, temperature=temperature)
+            current_temp = temperatures[i]
+            response = get_response(model=model, prompt=prompt, temperature=current_temp)
             responses.append(None if not response else response.split("\n"))
         best_response, detailed_responses = evaluate_responses(model, q_text, responses, temperature=temperature)
         return {
