@@ -104,7 +104,7 @@ def token_logger_decorator(func):
 model_dict = {
     'gpt-4o': 'gpt-4o',
     'gpt-4o-mini': 'gpt-4o-mini',
-    'o1-mini': 'o1-mini-2024-09-12',
+    'o3-mini': 'o3-mini',
     'chatgpt-4o-latest': 'chatgpt-4o-latest',
     'llama-3.1-70B': 'meta-llama/Meta-Llama-3.1-70B-Instruct',
     'llama-3.1-8B': 'meta-llama/Meta-Llama-3.1-8B-Instruct',
@@ -145,12 +145,13 @@ def get_response(model='chatgpt-4o-latest', prompt=None, temperature=0.001):
     else:
         client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
 
-    if model in ['o1-mini']:
+    if model in ['o3-mini']:
         messages = [{'role': 'user', 'content': prompt}]
         response = client.chat.completions.create(
             model=model_dict[model],
             messages=messages,
         )
+        print(response)
         return response.choices[0].message.content
     messages = []
     messages.append({'role': 'user', 'content': prompt})
